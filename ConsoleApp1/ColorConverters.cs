@@ -52,18 +52,12 @@ namespace ImageLab
         }
 
         public static double PivotRGB(double n)
-        {
-            return (n > 0.04045) ? Math.Pow((n + 0.055) / 1.055, 2.4) : n / 12.92;
-        }
+            => (n > 0.04045) ? Math.Pow((n + 0.055) / 1.055, 2.4) : n / 12.92;
 
         public static double UnpivotRGB(double n)
-        {
-            return (n > 0.0031308) ? 1.055 * Math.Pow(n, 1 / 2.4) - 0.055 : 12.92 * n;
-        }
+            => (n > 0.0031308) ? 1.055 * Math.Pow(n, 1 / 2.4) - 0.055 : 12.92 * n;
 
         public static double PivotXYZ(double n)
-        {
-            return (n > 0.008856) ? Math.Pow(n, 1.0 / 3) : (7.787 * n) + 16.0 / 116;
-        }
+            => (n > 0.008856) ? Math.Pow(n, 1.0 / 3) : (7.787 * n) + 16.0 / 116;
     }
 }
