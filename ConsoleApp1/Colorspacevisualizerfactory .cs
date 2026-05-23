@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 namespace ImageLab
 {
     // ============================================================
-    //  Factory - ينشئ المُصوِّر المناسب لكل نظام
+    //  Factory
     // ============================================================
     public static class ColorSpaceVisualizerFactory
     {
@@ -25,30 +25,24 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  RGB - مكعب الألوان (3D) + مستوى RG (2D)
+    //  RGB
     // ============================================================
     public class RGBVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "RGB";
         public bool Supports3D => true;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
-            // مستوى RG: عرض جميع قيم R,G مع B ثابتة عند قيمة sel
             for (int x = 0; x < w; x++)
-            {
                 for (int y = 0; y < h; y++)
                 {
                     int r = (int)(x * 255.0 / w);
                     int gr = (int)((h - 1 - y) * 255.0 / h);
-                    using (var pen = new SolidBrush(Color.FromArgb(r, gr, sel.B)))
-                        g.FillRectangle(pen, x, y, 1, 1);
+                    using (var br = new SolidBrush(Color.FromArgb(r, gr, sel.B)))
+                        g.FillRectangle(br, x, y, 1, 1);
                 }
-            }
-            // رسم المحاور
             DrawAxis(g, w, h, "R →", "↑ G");
-            // نقطة اللون المختار
             selPt = new PointF(sel.R * w / 255f, (255 - sel.G) * h / 255f);
             DrawSelector(g, selPt);
         }
@@ -59,7 +53,6 @@ namespace ImageLab
             int cx = w / 2, cy = h / 2;
             int step = 12;
 
-            // رسم نقاط المكعب
             for (int r = 0; r <= 255; r += step)
                 for (int gv = 0; gv <= 255; gv += step)
                     for (int b = 0; b <= 255; b += step)
@@ -68,19 +61,15 @@ namespace ImageLab
                         float fy = gv / 255f - 0.5f;
                         float fz = b / 255f - 0.5f;
                         var pt = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
-                        var col = Color.FromArgb(r, gv, b);
-                        using (var br = new SolidBrush(col))
+                        using (var br = new SolidBrush(Color.FromArgb(r, gv, b)))
                             g.FillEllipse(br, pt.X - 2, pt.Y - 2, 4, 4);
                     }
 
-            // نقطة اللون المختار
             float sx = sel.R / 255f - 0.5f;
             float sy = sel.G / 255f - 0.5f;
             float sz = sel.B / 255f - 0.5f;
             selPt = Projection3D.Project(sx, sy, sz, rotX, rotY, zoom, cx, cy);
             DrawSelector3D(g, selPt);
-
-            // تسمية المحاور
             DrawCubeAxes(g, rotX, rotY, zoom, cx, cy);
         }
 
@@ -93,9 +82,34 @@ namespace ImageLab
 
         public Color PickColor3D(PointF pt, int w, int h,
             float rotX, float rotY, float zoom)
-            => Color.FromArgb(128, 128, 128); // تقريبي
+        {
+            int cx = w / 2, cy = h / 2;
+            int step = 12;
 
-        // ---- مساعدات ----
+            Color best = Color.Gray;
+            float bestDist = float.MaxValue;
+
+            for (int r = 0; r <= 255; r += step)
+                for (int gv = 0; gv <= 255; gv += step)
+                    for (int b = 0; b <= 255; b += step)
+                    {
+                        float fx = r / 255f - 0.5f;
+                        float fy = gv / 255f - 0.5f;
+                        float fz = b / 255f - 0.5f;
+                        var projected = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
+                        float dx = projected.X - pt.X;
+                        float dy = projected.Y - pt.Y;
+                        float dist = dx * dx + dy * dy;
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = Color.FromArgb(r, gv, b);
+                        }
+                    }
+
+            return best;
+        }
+
         void DrawAxis(Graphics g, int w, int h, string xLabel, string yLabel)
         {
             using (var f = new Font("Consolas", 8))
@@ -106,8 +120,7 @@ namespace ImageLab
             }
         }
 
-        void DrawCubeAxes(Graphics g, float rotX, float rotY, float zoom,
-            int cx, int cy)
+        void DrawCubeAxes(Graphics g, float rotX, float rotY, float zoom, int cx, int cy)
         {
             string[] labels = { "R", "G", "B" };
             float[][] dirs = {
@@ -125,8 +138,7 @@ namespace ImageLab
                 for (int i = 0; i < 3; i++)
                 {
                     var o = Projection3D.Project(0, 0, 0, rotX, rotY, zoom, cx, cy);
-                    var e = Projection3D.Project(dirs[i][0], dirs[i][1], dirs[i][2],
-                        rotX, rotY, zoom, cx, cy);
+                    var e = Projection3D.Project(dirs[i][0], dirs[i][1], dirs[i][2], rotX, rotY, zoom, cx, cy);
                     using (var p = new Pen(cols[i], 2))
                         g.DrawLine(p, o, e);
                     using (var br = new SolidBrush(cols[i]))
@@ -138,13 +150,9 @@ namespace ImageLab
         void DrawSelector(Graphics g, PointF pt)
         {
             using (var p = new Pen(Color.White, 2))
-            {
                 g.DrawEllipse(p, pt.X - 6, pt.Y - 6, 12, 12);
-            }
             using (var p = new Pen(Color.Black, 1))
-            {
                 g.DrawEllipse(p, pt.X - 7, pt.Y - 7, 14, 14);
-            }
         }
 
         void DrawSelector3D(Graphics g, PointF pt)
@@ -159,48 +167,39 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  HSV - قرص الألوان (2D) + مخروط (3D)
+    //  HSV
     // ============================================================
     public class HSVVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "HSV";
         public bool Supports3D => true;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
-            // قرص HS: H زاوية، S نصف القطر، V ثابت عند 1
             int cx = w / 2, cy = h / 2;
             int r = Math.Min(cx, cy) - 8;
 
             for (int x = 0; x < w; x++)
-            {
                 for (int y = 0; y < h; y++)
                 {
                     float dx = x - cx, dy = y - cy;
                     float dist = (float)Math.Sqrt(dx * dx + dy * dy);
                     if (dist > r) continue;
-
                     float h2 = (float)(Math.Atan2(dy, dx) * 180 / Math.PI + 360) % 360;
                     float s = dist / r;
-                    var col = HSVtoRGB(h2, s, 1.0f);
-                    using (var br = new SolidBrush(col))
+                    using (var br = new SolidBrush(HSVtoRGB(h2, s, 1.0f)))
                         g.FillRectangle(br, x, y, 1, 1);
                 }
-            }
 
-            // رسم حدود القرص
             using (var p = new Pen(Color.FromArgb(60, 255, 255, 255), 1))
                 g.DrawEllipse(p, cx - r, cy - r, r * 2, r * 2);
 
-            // نقطة اللون المختار
             var hsv = RGBtoHSV(sel);
             float ang = (float)(hsv.H * Math.PI / 180);
             float sr = (float)hsv.S * r;
             selPt = new PointF(cx + sr * (float)Math.Cos(ang),
                                cy + sr * (float)Math.Sin(ang));
             DrawSelector(g, selPt);
-
             DrawLabel(g, "H = زاوية   S = مسافة من المركز", w, h);
         }
 
@@ -219,10 +218,8 @@ namespace ImageLab
                         float fx = S * V * (float)Math.Cos(ang) * 0.5f;
                         float fy = V * 0.5f - 0.25f;
                         float fz = S * V * (float)Math.Sin(ang) * 0.5f;
-
                         var pt = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
-                        var col = HSVtoRGB(H, S, V);
-                        using (var br = new SolidBrush(col))
+                        using (var br = new SolidBrush(HSVtoRGB(H, S, V)))
                             g.FillEllipse(br, pt.X - 2, pt.Y - 2, 4, 4);
                     }
 
@@ -248,7 +245,35 @@ namespace ImageLab
 
         public Color PickColor3D(PointF pt, int w, int h,
             float rotX, float rotY, float zoom)
-            => Color.FromArgb(128, 128, 128);
+        {
+            int cx = w / 2, cy = h / 2;
+            int stepH = 15, stepS = 5, stepV = 5;
+
+            Color best = Color.Gray;
+            float bestDist = float.MaxValue;
+
+            for (int hv = 0; hv < 360; hv += stepH)
+                for (int sv = 0; sv <= 100; sv += stepS)
+                    for (int vv = 0; vv <= 100; vv += stepV)
+                    {
+                        float H = hv, S = sv / 100f, V = vv / 100f;
+                        float ang = (float)(H * Math.PI / 180);
+                        float fx = S * V * (float)Math.Cos(ang) * 0.5f;
+                        float fy = V * 0.5f - 0.25f;
+                        float fz = S * V * (float)Math.Sin(ang) * 0.5f;
+                        var projected = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
+                        float dx2 = projected.X - pt.X;
+                        float dy2 = projected.Y - pt.Y;
+                        float dist = dx2 * dx2 + dy2 * dy2;
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = HSVtoRGB(H, S, V);
+                        }
+                    }
+
+            return best;
+        }
 
         // ---- مساعدات ----
         (double H, double S, double V) RGBtoHSV(Color c)
@@ -306,29 +331,24 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  YUV - مستوى UV (2D) + فضاء ثلاثي الأبعاد (3D)
+    //  YUV
     // ============================================================
     public class YUVVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "YUV";
         public bool Supports3D => true;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
             var yuv = RGBtoYUV(sel);
-            // مستوى UV عند Y=sel.Y
             for (int x = 0; x < w; x++)
-            {
                 for (int y = 0; y < h; y++)
                 {
                     double U = -111 + x * 222.0 / w;
                     double V = 156 - y * 312.0 / h;
-                    var col = YUVtoRGB(yuv.Y, U, V);
-                    using (var br = new SolidBrush(col))
+                    using (var br = new SolidBrush(YUVtoRGB(yuv.Y, U, V)))
                         g.FillRectangle(br, x, y, 1, 1);
                 }
-            }
             DrawAxis(g, w, h, "U →", "↑ V");
             selPt = new PointF(
                 (float)((yuv.U + 111) / 222 * w),
@@ -349,22 +369,20 @@ namespace ImageLab
                         double Y = 0.299 * r + 0.587 * gv + 0.114 * b;
                         double U = -0.14713 * r - 0.28886 * gv + 0.436 * b;
                         double V = 0.615 * r - 0.51499 * gv - 0.10001 * b;
-
-                        float fx = (float)(U / 111);
-                        float fy = (float)(Y / 255 - 0.5);
-                        float fz = (float)(V / 156);
-
-                        var pt = Projection3D.Project(fx * 0.5f, fy * 0.5f, fz * 0.5f,
-                            rotX, rotY, zoom, cx, cy);
+                        float fx = (float)(U / 111 * 0.5f);
+                        float fy = (float)(Y / 255 - 0.5) * 0.5f;
+                        float fz = (float)(V / 156 * 0.5f);
+                        var pt = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
                         using (var br = new SolidBrush(Color.FromArgb(r, gv, b)))
                             g.FillEllipse(br, pt.X - 2, pt.Y - 2, 4, 4);
                     }
 
             var yuv = RGBtoYUV(sel);
-            float sfx = (float)(yuv.U / 111 * 0.5f);
-            float sfy = (float)(yuv.Y / 255 - 0.5) * 0.5f;
-            float sfz = (float)(yuv.V / 156 * 0.5f);
-            selPt = Projection3D.Project(sfx, sfy, sfz, rotX, rotY, zoom, cx, cy);
+            selPt = Projection3D.Project(
+                (float)(yuv.U / 111 * 0.5f),
+                (float)(yuv.Y / 255 - 0.5) * 0.5f,
+                (float)(yuv.V / 156 * 0.5f),
+                rotX, rotY, zoom, cx, cy);
             DrawSelector3D(g, selPt);
         }
 
@@ -377,11 +395,40 @@ namespace ImageLab
 
         public Color PickColor3D(PointF pt, int w, int h,
             float rotX, float rotY, float zoom)
-            => Color.FromArgb(128, 128, 128);
+        {
+            int cx = w / 2, cy = h / 2;
+            int step = 20;
+
+            Color best = Color.Gray;
+            float bestDist = float.MaxValue;
+
+            for (int r = 0; r <= 255; r += step)
+                for (int gv = 0; gv <= 255; gv += step)
+                    for (int b = 0; b <= 255; b += step)
+                    {
+                        double Y = 0.299 * r + 0.587 * gv + 0.114 * b;
+                        double U = -0.14713 * r - 0.28886 * gv + 0.436 * b;
+                        double V = 0.615 * r - 0.51499 * gv - 0.10001 * b;
+                        float fx = (float)(U / 111 * 0.5f);
+                        float fy = (float)(Y / 255 - 0.5) * 0.5f;
+                        float fz = (float)(V / 156 * 0.5f);
+                        var projected = Projection3D.Project(fx, fy, fz, rotX, rotY, zoom, cx, cy);
+                        float dx = projected.X - pt.X;
+                        float dy2 = projected.Y - pt.Y;
+                        float dist = dx * dx + dy2 * dy2;
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = Color.FromArgb(r, gv, b);
+                        }
+                    }
+
+            return best;
+        }
 
         (double Y, double U, double V) RGBtoYUV(Color c) =>
             (0.299 * c.R + 0.587 * c.G + 0.114 * c.B,
-             -0.14713 * c.R - 0.28886 * c.G + 0.436 * c.B,
+            -0.14713 * c.R - 0.28886 * c.G + 0.436 * c.B,
              0.615 * c.R - 0.51499 * c.G - 0.10001 * c.B);
 
         Color YUVtoRGB(double y, double u, double v) => Color.FromArgb(
@@ -412,15 +459,14 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  YCbCr - مستوى CbCr (2D) + فضاء 3D
+    //  YCbCr
     // ============================================================
     public class YCbCrVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "YCbCr";
         public bool Supports3D => true;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
             var ycc = RGBtoYCbCr(sel);
             for (int x = 0; x < w; x++)
@@ -428,11 +474,9 @@ namespace ImageLab
                 {
                     double Cb = x * 255.0 / w;
                     double Cr = (h - 1 - y) * 255.0 / h;
-                    var col = YCbCrtoRGB(ycc.Y, Cb, Cr);
-                    using (var br = new SolidBrush(col))
+                    using (var br = new SolidBrush(YCbCrtoRGB(ycc.Y, Cb, Cr)))
                         g.FillRectangle(br, x, y, 1, 1);
                 }
-
             DrawAxis(g, w, h, "Cb →", "↑ Cr");
             selPt = new PointF((float)(ycc.Cb * w / 255), (float)((255 - ycc.Cr) * h / 255));
             DrawSelector(g, selPt);
@@ -475,8 +519,39 @@ namespace ImageLab
             return YCbCrtoRGB(128, Cb, Cr);
         }
 
-        public Color PickColor3D(PointF pt, int w, int h, float rX, float rY, float z)
-            => Color.FromArgb(128, 128, 128);
+        public Color PickColor3D(PointF pt, int w, int h,
+            float rotX, float rotY, float zoom)
+        {
+            int cx = w / 2, cy = h / 2;
+            int step = 20;
+
+            Color best = Color.Gray;
+            float bestDist = float.MaxValue;
+
+            for (int r = 0; r <= 255; r += step)
+                for (int gv = 0; gv <= 255; gv += step)
+                    for (int b = 0; b <= 255; b += step)
+                    {
+                        double Y = 0.299 * r + 0.587 * gv + 0.114 * b;
+                        double Cb = 128 - 0.168736 * r - 0.331264 * gv + 0.5 * b;
+                        double Cr = 128 + 0.5 * r - 0.418688 * gv - 0.081312 * b;
+                        var projected = Projection3D.Project(
+                            (float)(Cb / 255 - 0.5),
+                            (float)(Y / 255 - 0.5),
+                            (float)(Cr / 255 - 0.5),
+                            rotX, rotY, zoom, cx, cy);
+                        float dx = projected.X - pt.X;
+                        float dy2 = projected.Y - pt.Y;
+                        float dist = dx * dx + dy2 * dy2;
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = Color.FromArgb(r, gv, b);
+                        }
+                    }
+
+            return best;
+        }
 
         (double Y, double Cb, double Cr) RGBtoYCbCr(Color c) =>
             (0.299 * c.R + 0.587 * c.G + 0.114 * c.B,
@@ -515,15 +590,14 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  LAB - مستوى AB (2D) + فضاء 3D
+    //  LAB
     // ============================================================
     public class LABVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "LAB";
         public bool Supports3D => true;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
             var lab = RGBtoLAB(sel);
             for (int x = 0; x < w; x++)
@@ -531,11 +605,9 @@ namespace ImageLab
                 {
                     double A = -128 + x * 255.0 / w;
                     double B = 127 - y * 255.0 / h;
-                    var col = LABtoRGB(lab.L, A, B);
-                    using (var br = new SolidBrush(col))
+                    using (var br = new SolidBrush(LABtoRGB(lab.L, A, B)))
                         g.FillRectangle(br, x, y, 1, 1);
                 }
-
             DrawAxis(g, w, h, "A →", "↑ B");
             selPt = new PointF(
                 (float)((lab.A + 128) / 255 * w),
@@ -578,8 +650,37 @@ namespace ImageLab
             return LABtoRGB(50, A, B);
         }
 
-        public Color PickColor3D(PointF pt, int w, int h, float rX, float rY, float z)
-            => Color.FromArgb(128, 128, 128);
+        public Color PickColor3D(PointF pt, int w, int h,
+            float rotX, float rotY, float zoom)
+        {
+            int cx = w / 2, cy = h / 2;
+            int step = 20;
+
+            Color best = Color.Gray;
+            float bestDist = float.MaxValue;
+
+            for (int r = 0; r <= 255; r += step)
+                for (int gv = 0; gv <= 255; gv += step)
+                    for (int b = 0; b <= 255; b += step)
+                    {
+                        var lab = RGBtoLAB(Color.FromArgb(r, gv, b));
+                        var projected = Projection3D.Project(
+                            (float)(lab.A / 128 * 0.5),
+                            (float)(lab.L / 100 * 0.5 - 0.25),
+                            (float)(lab.B / 128 * 0.5),
+                            rotX, rotY, zoom, cx, cy);
+                        float dx = projected.X - pt.X;
+                        float dy2 = projected.Y - pt.Y;
+                        float dist = dx * dx + dy2 * dy2;
+                        if (dist < bestDist)
+                        {
+                            bestDist = dist;
+                            best = Color.FromArgb(r, gv, b);
+                        }
+                    }
+
+            return best;
+        }
 
         (double L, double A, double B) RGBtoLAB(Color c)
         {
@@ -632,32 +733,27 @@ namespace ImageLab
     }
 
     // ============================================================
-    //  CMYK - مستوى CM (2D) + فضاء 3D
+    //  CMYK  (2D فقط - لا يتغيّر)
     // ============================================================
     public class CMYKVisualizer : IColorSpaceVisualizer
     {
         public string SystemName => "CMYK";
-        public bool Supports3D => false;   // CMYK 4D → نكتفي بـ 2D
+        public bool Supports3D => false;
 
-        public void Draw2D(Graphics g, int w, int h,
-            Color sel, out PointF selPt)
+        public void Draw2D(Graphics g, int w, int h, Color sel, out PointF selPt)
         {
             var cmyk = RGBtoCMYK(sel);
-            // مستوى CM عند Y=sel.Y, K=sel.K
             for (int x = 0; x < w; x++)
                 for (int y = 0; y < h; y++)
                 {
                     double C = x * 1.0 / w;
                     double M = (h - 1 - y) * 1.0 / h;
-                    var col = CMYKtoRGB(C, M, cmyk.Y, cmyk.K);
-                    using (var br = new SolidBrush(col))
+                    using (var br = new SolidBrush(CMYKtoRGB(C, M, cmyk.Y, cmyk.K)))
                         g.FillRectangle(br, x, y, 1, 1);
                 }
-
             DrawAxis(g, w, h, "C →", "↑ M");
             selPt = new PointF((float)(cmyk.C * w), (float)((1 - cmyk.M) * h));
             DrawSelector(g, selPt);
-
             using (var f = new Font("Consolas", 7))
             using (var br = new SolidBrush(Color.FromArgb(200, 255, 255, 255)))
                 g.DrawString($"Y={cmyk.Y:0.00}  K={cmyk.K:0.00}  (ثابتان)", f, br, 4, h - 16);
@@ -665,10 +761,7 @@ namespace ImageLab
 
         public void Draw3D(Graphics g, int w, int h,
             Color sel, float rotX, float rotY, float zoom, out PointF selPt)
-        {
-            // CMYK لا يدعم 3D - نعرض 2D بدلاً
-            Draw2D(g, w, h, sel, out selPt);
-        }
+            => Draw2D(g, w, h, sel, out selPt);
 
         public Color PickColor2D(PointF pt, int w, int h)
         {

@@ -586,70 +586,99 @@ namespace ImageLab
             ApplyChannels();
         }
 
+
         void InitChannels()
         {
             var sys = ColorSystemFactory.GetSystem(activeSys);
+
             int n = sys.Names.Length;
+
             chEnabled = new bool[n];
             chOffset = new double[n];
-            for (int i = 0; i < n; i++) { chEnabled[i] = true; chOffset[i] = 0; }
+
+            for (int i = 0; i < n; i++)
+            {
+                chEnabled[i] = true;
+                chOffset[i] = 0;
+            }
+
             BuildChannelUI(sys);
         }
 
         void ApplyChannels()
         {
             if (originalBitmap == null) return;
-            var sys = ColorSystemFactory.GetSystem(activeSys);
-            int W = originalBitmap.Width, H = originalBitmap.Height;
-            var rect = new Rectangle(0, 0, W, H);
 
-            BitmapData srcD = originalBitmap.LockBits(rect,
-                ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            modifiedBitmap?.Dispose();
-            modifiedBitmap = new Bitmap(W, H, PixelFormat.Format32bppArgb);
-            BitmapData dstD = modifiedBitmap.LockBits(rect,
-                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            var sys = ColorSystemFactory.GetSystem(activeSys);
+
+            var toSpace = sys.ToSpace;
+            var fromSpace = sys.FromSpace;
+            var ranges = sys.Ranges;
+            var namesLen = sys.Names.Length;
+
+            int w = originalBitmap.Width;
+            int h = originalBitmap.Height;
+            Rectangle rect = new Rectangle(0, 0, w, h);
+
+            BitmapData src = originalBitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+
+            if (modifiedBitmap != null) modifiedBitmap.Dispose();
+            modifiedBitmap = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+
+            BitmapData dst = modifiedBitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
 
             unsafe
             {
-                byte* src = (byte*)srcD.Scan0;
-                byte* dst = (byte*)dstD.Scan0;
-                int stride = srcD.Stride;
+                byte* sp = (byte*)src.Scan0;
+                byte* dp = (byte*)dst.Scan0;
 
-                for (int py = 0; py < H; py++)
-                    for (int px = 0; px < W; px++)
+                int stride = src.Stride;
+
+                double[] space = new double[namesLen];
+                int[] rgb;
+
+                for (int y = 0; y < h; y++)
+                {
+                    int row = y * stride;
+
+                    for (int x = 0; x < w; x++)
                     {
-                        int idx = py * stride + px * 4;
-                        byte b0 = src[idx], g0 = src[idx + 1],
-                             r0 = src[idx + 2], a0 = src[idx + 3];
+                        int i = row + x * 4;
 
-                        double[] space = sys.ToSpace(r0, g0, b0);
-                        int n = sys.Names.Length;
+                        byte b = sp[i];
+                        byte g = sp[i + 1];
+                        byte r = sp[i + 2];
+                        byte a = sp[i + 3];
 
-                        for (int c = 0; c < n; c++)
+                        space = toSpace(r, g, b);
+
+                        for (int c = 0; c < namesLen; c++)
                         {
                             if (!chEnabled[c])
-                                space[c] = (sys.Ranges[c].min + sys.Ranges[c].max) / 2.0;
+                                space[c] = (ranges[c].min + ranges[c].max) * 0.5;
                             else
                                 space[c] += chOffset[c];
 
-                            space[c] = Math.Min(sys.Ranges[c].max,
-                                       Math.Max(sys.Ranges[c].min, space[c]));
+                            if (space[c] < ranges[c].min) space[c] = ranges[c].min;
+                            else if (space[c] > ranges[c].max) space[c] = ranges[c].max;
                         }
 
-                        int[] rgb = sys.FromSpace(space);
-                        dst[idx] = (byte)Clamp(rgb[2]);
-                        dst[idx + 1] = (byte)Clamp(rgb[1]);
-                        dst[idx + 2] = (byte)Clamp(rgb[0]);
-                        dst[idx + 3] = a0;
+                        rgb = fromSpace(space);
+
+                        dp[i] = (byte)Clamp(rgb[2]);
+                        dp[i + 1] = (byte)Clamp(rgb[1]);
+                        dp[i + 2] = (byte)Clamp(rgb[0]);
+                        dp[i + 3] = a;
                     }
+                }
             }
 
-            originalBitmap.UnlockBits(srcD);
-            modifiedBitmap.UnlockBits(dstD);
+            originalBitmap.UnlockBits(src);
+            modifiedBitmap.UnlockBits(dst);
+
+            pictureBox.Image?.Dispose();
             pictureBox.Image = (Bitmap)modifiedBitmap.Clone();
         }
-
         int Clamp(int v) => v < 0 ? 0 : v > 255 ? 255 : v;
 
         bool IsImage(string path)
